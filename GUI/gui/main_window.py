@@ -59,8 +59,8 @@ class CanvasMangaList(ctk.CTkFrame):
         self._on_select_cb = on_select
         self.items = []
         self.selected_index = -1
-        self.hover_index = -1
         self._redraw_pending = None
+        self._visible_indices = set()
 
         self.canvas = tk.Canvas(
             self, highlightthickness=0, bg=BG_GRAY, bd=0,
@@ -78,8 +78,6 @@ class CanvasMangaList(ctk.CTkFrame):
         self.canvas.bind("<Configure>", self._on_configure)
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind("<Button-1>", self._on_click)
-        self.canvas.bind("<Motion>", self._on_motion)
-        self.canvas.bind("<Leave>", self._on_leave)
 
     def _on_scroll_cmd(self, *args):
         self.scrollbar.set(*args)
@@ -87,7 +85,7 @@ class CanvasMangaList(ctk.CTkFrame):
     def set_items(self, items):
         self.items = list(items)
         self.selected_index = -1
-        self.hover_index = -1
+        self._visible_indices.clear()
         self.canvas.yview_moveto(0)
         self._update_scroll()
         self._redraw()
@@ -95,7 +93,7 @@ class CanvasMangaList(ctk.CTkFrame):
     def clear(self):
         self.items = []
         self.selected_index = -1
-        self.hover_index = -1
+        self._visible_indices.clear()
         self.canvas.yview_moveto(0)
         self.canvas.delete("all")
         self.scrollbar.pack_forget()
@@ -138,37 +136,23 @@ class CanvasMangaList(ctk.CTkFrame):
         return first, last
 
     def _redraw(self):
-        self.canvas.delete("all")
         if not self.items:
+            self.canvas.delete("all")
+            self._visible_indices.clear()
             return
         first, last = self._visible_range()
         w = max(self.canvas.winfo_width(), 300)
+        new_visible = set(range(first, min(last, len(self.items))))
 
-        for i in range(first, last):
+        for i in sorted(new_visible):
             if i >= len(self.items):
                 break
             item = self.items[i]
             y = i * self.ITEM_HEIGHT + 4
 
-            if i == self.selected_index:
-                bg = PINK_LIGHT
-            elif i == self.hover_index:
-                bg = BLUE_LIGHT
-            else:
-                bg = ""
-
-            self.canvas.create_rectangle(
-                4, y, w - 4, y + self.ITEM_HEIGHT - 4,
-                fill=bg, outline="", tags=("item", f"r{i}"),
-            )
+            bg = PINK_LIGHT if i == self.selected_index else ""
 
             title = (item.get("title") or f"#{item['id']}")[:40]
-            self.canvas.create_text(
-                14, y + 8, text=title, anchor="nw",
-                font=(FONT_FAMILY, 13, "bold"), fill=TEXT_DARK,
-                tags=("item", f"t{i}"),
-            )
-
             meta = f"#{item['id']}"
             author = item.get("author", "")
             if author:
@@ -176,26 +160,41 @@ class CanvasMangaList(ctk.CTkFrame):
             ch = item.get("chapter_count", 0)
             if ch:
                 meta += f"  ·  {ch}话"
-            self.canvas.create_text(
-                14, y + 30, text=meta, anchor="nw",
-                font=(FONT_FAMILY, 10), fill=TEXT_GRAY,
-                tags=("item", f"t{i}"),
-            )
 
-    def _redraw_highlights(self):
-        first, last = self._visible_range()
-        for i in range(first, last):
-            if i >= len(self.items):
-                break
-            if i == self.selected_index:
-                bg = PINK_LIGHT
-            elif i == self.hover_index:
-                bg = BLUE_LIGHT
+            if i in self._visible_indices:
+                rect_items = self.canvas.find_withtag(f"r{i}")
+                if rect_items:
+                    self.canvas.coords(rect_items[0], 4, y, w - 4, y + self.ITEM_HEIGHT - 4)
+                    self.canvas.itemconfig(rect_items[0], fill=bg)
+                text_items = self.canvas.find_withtag(f"t{i}")
+                if len(text_items) >= 2:
+                    self.canvas.coords(text_items[0], 14, y + 8)
+                    self.canvas.itemconfig(text_items[0], text=title)
+                    self.canvas.coords(text_items[1], 14, y + 30)
+                    self.canvas.itemconfig(text_items[1], text=meta)
+                elif len(text_items) == 1:
+                    self.canvas.coords(text_items[0], 14, y + 8)
+                    self.canvas.itemconfig(text_items[0], text=title)
             else:
-                bg = ""
-            rect_items = self.canvas.find_withtag(f"r{i}")
-            if rect_items:
-                self.canvas.itemconfig(rect_items[0], fill=bg)
+                self.canvas.create_rectangle(
+                    4, y, w - 4, y + self.ITEM_HEIGHT - 4,
+                    fill=bg, outline="", tags=("item", f"r{i}"),
+                )
+                self.canvas.create_text(
+                    14, y + 8, text=title, anchor="nw",
+                    font=(FONT_FAMILY, 13, "bold"), fill=TEXT_DARK,
+                    tags=("item", f"t{i}"),
+                )
+                self.canvas.create_text(
+                    14, y + 30, text=meta, anchor="nw",
+                    font=(FONT_FAMILY, 10), fill=TEXT_GRAY,
+                    tags=("item", f"t{i}"),
+                )
+
+        for i in self._visible_indices - new_visible:
+            self.canvas.delete(f"r{i}", f"t{i}")
+
+        self._visible_indices = new_visible
 
     def _on_click(self, event):
         if not self.items:
@@ -208,24 +207,6 @@ class CanvasMangaList(ctk.CTkFrame):
             if self._on_select_cb:
                 item = self.items[idx]
                 self._on_select_cb(item["id"], item)
-
-    def _on_motion(self, event):
-        if not self.items:
-            return
-        canvas_y = self.canvas.canvasy(event.y)
-        idx = int(canvas_y // self.ITEM_HEIGHT)
-        if 0 <= idx < len(self.items):
-            if idx != self.hover_index:
-                self.hover_index = idx
-                self._redraw_highlights()
-        elif self.hover_index != -1:
-            self.hover_index = -1
-            self._redraw_highlights()
-
-    def _on_leave(self, event):
-        if self.hover_index != -1:
-            self.hover_index = -1
-            self._redraw_highlights()
 
     def _on_mousewheel(self, event):
         total_h = len(self.items) * self.ITEM_HEIGHT + 8
