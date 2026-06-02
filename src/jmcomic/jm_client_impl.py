@@ -280,6 +280,9 @@ class JmHtmlClient(AbstractJmClient):
         photo = self.fetch_detail_entity(photo_id, 'photo')
 
         # 一并获取该章节的所处本子
+        # todo: 可优化，获取章节所在本子，其实不需要等待章节获取完毕后。
+        #  可以直接调用 self.get_album_detail(photo_id)，会重定向返回本子的HTML
+        # (had polished by FutureClientProxy)
         if fetch_album is True:
             photo.from_album = self.get_album_detail(photo.album_id)
 
@@ -696,17 +699,7 @@ class JmApiClient(AbstractJmClient):
 
     def fetch_detail_entity(self, jmid, clazz):
         """
-        Fetches a JM entity (album or chapter) by its JM ID and returns it as an instance of `clazz`.
-        
-        Parameters:
-            jmid (str | int): JM ID or value parseable to a JM ID.
-            clazz (type): Entity class to parse the response into (e.g., `JmAlbumDetail` or a chapter/detail class).
-        
-        Returns:
-            object: An instance of `clazz` populated from the API response data.
-        
-        Raises:
-            Exception: Raised via ExceptionTool.raise_missing if the API response lacks required data.
+        请求实体类
         """
         jmid = JmcomicText.parse_to_jm_id(jmid)
         url = self.API_ALBUM if issubclass(clazz, JmAlbumDetail) else self.API_CHAPTER
@@ -717,7 +710,7 @@ class JmApiClient(AbstractJmClient):
             })
         )
 
-        if not resp.encoded_data or resp.res_data.get('name') is None:
+        if resp.res_data.get('name') is None:
             ExceptionTool.raise_missing(resp, jmid)
 
         return JmApiAdaptTool.parse_entity(resp.res_data, clazz)
@@ -772,17 +765,55 @@ class JmApiClient(AbstractJmClient):
 
     def setting(self) -> JmApiResp:
         """
-        禁漫app的setting请求
+        禁漫app的setting请求，返回如下内容（resp.res_data）
+        {
+          "logo_path": "https://cdn-msp.jmapiproxy1.monster/media/logo/new_logo.png",
+          "main_web_host": "18-comic.work",
+          "img_host": "https://cdn-msp.jmapiproxy1.monster",
+          "base_url": "https://www.jmapinode.biz",
+          "is_cn": 0,
+          "cn_base_url": "https://www.jmapinode.biz",
+          "version": "1.6.0",
+          "test_version": "1.6.1",
+          "store_link": "https://play.google.com/store/apps/details?id=com.jiaohua_browser",
+          "ios_version": "1.6.0",
+          "ios_test_version": "1.6.1",
+          "ios_store_link": "https://18comic.vip/stray/",
+          "ad_cache_version": 1698140798,
+          "bundle_url": "https://18-comic.work/static/apk/patches1.6.0.zip",
+          "is_hot_update": true,
+          "api_banner_path": "https://cdn-msp.jmapiproxy1.monster/media/logo/channel_log.png?v=",
+          "version_info": "\nAPP & IOS更新\nV1.6.0\n#禁漫 APK 更新拉!!\n更新調整以下項目\n1. 系統優化\n\nV1.5.9\n1. 跳錯誤新增 重試 網頁 按鈕\n2. 圖片讀取優化\n3.
+          線路調整優化\n\n無法順利更新或是系統題是有風險請使用下方\n下載點2\n有問題可以到DC群反饋\nhttps://discord.gg/V74p7HM\n",
+          "app_shunts": [
+            {
+              "title": "圖源1",
+              "key": 1
+            },
+            {
+              "title": "圖源2",
+              "key": 2
+            },
+            {
+              "title": "圖源3",
+              "key": 3
+            },
+            {
+              "title": "圖源4",
+              "key": 4
+            }
+          ],
+          "download_url": "https://18-comic.work/static/apk/1.6.0.apk",
+          "app_landing_page": "https://jm365.work/pXYbfA",
+          "float_ad": true
+        }
         """
         resp = self.req_api('/setting')
 
         # 检查禁漫最新的版本号
-        setting_ver = str(resp.model_data.jm3_version)
+        setting_ver = str(resp.model_data.version)
         # 禁漫接口的版本 > jmcomic库内置版本
-        if (
-                JmModuleConfig.FLAG_USE_VERSION_NEWER_IF_BEHIND
-                and JmcomicText.compare_versions(setting_ver, JmMagicConstants.APP_VERSION) == 1
-        ):
+        if setting_ver > JmMagicConstants.APP_VERSION and JmModuleConfig.FLAG_USE_VERSION_NEWER_IF_BEHIND:
             jm_log('api.setting', f'change APP_VERSION from [{JmMagicConstants.APP_VERSION}] to [{setting_ver}]')
             JmMagicConstants.APP_VERSION = setting_ver
 
@@ -928,7 +959,10 @@ class JmApiClient(AbstractJmClient):
 
         # 1. 检查是否 album_missing
         # json: {'code': 200, 'data': []}
-        # 最新api已不存在这种情况，无需检查
+        data = resp.model().data
+        if isinstance(data, list) and len(data) == 0:
+            ExceptionTool.raise_missing(resp, JmcomicText.parse_to_jm_id(url))
+
         # 2. 是否是特殊的内容
         # 暂无
 
@@ -973,8 +1007,7 @@ class JmApiClient(AbstractJmClient):
     def after_init(self):
         # 自动更新禁漫API域名
         if JmModuleConfig.FLAG_API_CLIENT_AUTO_UPDATE_DOMAIN:
-            new_server_list = self.fetch_latest_api_domain_for_module()
-            self.update_old_api_domain(new_server_list)
+            self.update_api_domain()
 
         # 保证拥有cookies，因为移动端要求必须携带cookies，否则会直接跳转同一本子【禁漫娘】
         if JmModuleConfig.FLAG_API_CLIENT_REQUIRE_COOKIES:
@@ -999,19 +1032,13 @@ class JmApiClient(AbstractJmClient):
         else:
             return res_data['Server']
 
-    def update_old_api_domain(self, new_server_list: List[str]):
-        if new_server_list and sorted(self.domain_list) == sorted(JmModuleConfig.DOMAIN_API_LIST):
-            self.domain_list = new_server_list
-
-    def fetch_latest_api_domain_for_module(self):
-        if JmModuleConfig.DOMAIN_API_UPDATED_LIST is not None:
-            return JmModuleConfig.DOMAIN_API_UPDATED_LIST
+    def update_api_domain(self):
+        if True is JmModuleConfig.FLAG_API_CLIENT_AUTO_UPDATE_DOMAIN_DONE:
+            return
 
         with self.client_update_domain_lock:
-            # double check
-            if JmModuleConfig.DOMAIN_API_UPDATED_LIST is not None:
-                return JmModuleConfig.DOMAIN_API_UPDATED_LIST
-
+            if True is JmModuleConfig.FLAG_API_CLIENT_AUTO_UPDATE_DOMAIN_DONE:
+                return
             # 遍历多个域名服务器
             for url in JmModuleConfig.API_URL_DOMAIN_SERVER_LIST:
                 try:
@@ -1023,20 +1050,18 @@ class JmApiClient(AbstractJmClient):
                     jm_log('api.update_domain.success',
                            f'获取到最新的API域名，替换jmcomic内置域名：(new){new_server_list} ---→ (old){old_server_list}'
                            )
-                    JmModuleConfig.DOMAIN_API_UPDATED_LIST = new_server_list
-                    return new_server_list
+                    # 更新域名
+                    if sorted(self.domain_list) == sorted(old_server_list):
+                        self.domain_list = new_server_list
+                    JmModuleConfig.DOMAIN_API_LIST = new_server_list
+                    break
                 except Exception as e:
                     jm_log('api.update_domain.error',
-                           f'通过[{url}]自动更新API域名失败，尝试下一个地址。'
+                           f'通过[{url}]自动更新API域名失败，仍使用jmcomic内置域名。'
                            f'可通过代码[JmModuleConfig.FLAG_API_CLIENT_AUTO_UPDATE_DOMAIN=False]关闭自动更新API域名. 异常： {e}'
                            )
-                    continue
-
-            # 走到这里，说明没有获取到域名更新
-            # 为了本方法不被重复执行，把新域名字段修改为空列表
-            # 空列表相当于一个done标识
-            JmModuleConfig.DOMAIN_API_UPDATED_LIST = []
-            return JmModuleConfig.DOMAIN_API_UPDATED_LIST
+            # set done finally
+            JmModuleConfig.FLAG_API_CLIENT_AUTO_UPDATE_DOMAIN_DONE = True
 
     client_init_cookies_lock = Lock()
 

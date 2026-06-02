@@ -1,7 +1,6 @@
 # GitHub Actions 测试用
 # 移动端配置
 dir_rule:
-  normalize_zh: zh-cn
   rule: Bd_Aauthor_Aid_Pindextitle
 
 client:

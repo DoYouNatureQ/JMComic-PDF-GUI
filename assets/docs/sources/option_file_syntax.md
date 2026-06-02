@@ -42,14 +42,6 @@ client:
   # retry_times: 请求失败重试次数，默认为5
   retry_times: 5
 
-  # cache: 是否开启客户端级别的缓存，用于缓存已经请求过的元数据（如本子详情、搜索结果等），减少重复网络请求。
-  # 支持以下几种配置值（详见 CacheRegistry 类）：
-  #   - null 或 false (默认值): 关闭缓存，每次请求都重新发起。
-  #   - true 或 level_option: 开启 option 级别缓存，同一个 option 派生的所有 client 共享同一份缓存。
-  #   - level_client: 开启 client 级别缓存，每个 client 维持各自独立的缓存字典，互不干扰。
-  cache: null
-
-
   # postman: 请求配置
   postman:
     meta_data:
@@ -123,17 +115,6 @@ dir_rule:
   # rule: Bd / Aauthor / (JM{Aid}-{Pindex})-{Pname}
   # {}大括号里的内容同样是写 Axxx 或 Pxxx，其他语法自行参考python f-string的语法
   # 另外，rule开头的Bd可忽略不写，因为程序会自动插入Bd
-
-  # normalize_zh: 可选。控制是否对目录/文件名中的中文进行繁简体规范化。
-  #   - None（默认）：不做任何转换，保持历史行为
-  #   - zh-cn：将中文文本规范为简体
-  #   - zh-tw：将中文文本规范为繁体
-  # 该功能依赖可选库 `zhconv`（非必需），若未安装或转换失败，程序会回退到原字符串并继续工作，不会影响下载流程。
-  # 示例：
-  # dir_rule:
-  #   base_dir: D:/a/b/c/
-  #   rule: Bd / Ptitle
-  #   normalize_zh: zh-cn
 ```
 
 ## 3. option插件配置项
@@ -145,7 +126,6 @@ dir_rule:
 plugins:
   after_init:
     - plugin: usage_log # 实时打印硬件占用率的插件
-      # log: false # 选填。所有的插件都可以配置 `log: false` 以关闭该插件执行时产生的日志输出，默认是 true
       kwargs:
         interval: 0.5 # 间隔时间
         enable_warning: true # 占用过大时发出预警
@@ -223,28 +203,29 @@ plugins:
           rule: '{Atitle}/{Aid}_cover.jpg'
     
 
-  after_album: # 钩子（插件被调用时机）
+  after_album:
     - plugin: zip # 压缩文件插件
       kwargs:
-        # 压缩文件插件，配在不同钩子下面，效果不一样。可以选择配在 after_album 或者 after_photo 下
-        #   配置在 after_album 下 → 整个本子合并为一个压缩文件
-        #   配置在 after_photo 下 → 每个章节各一个压缩文件
-        # （旧的 level 配置已废弃，如果你配置过level，比如level=photo, 请直接改用after_photo）
+        level: photo # 按照章节，一个章节一个压缩文件
+        # level 也可以配成 album，表示一个本子对应一个压缩文件，该压缩文件会包含这个本子的所有章节
+
+        filename_rule: Ptitle # 压缩文件的命名规则
+        # 请注意⚠ [https://github.com/hect0x7/JMComic-Crawler-Python/issues/223#issuecomment-2045227527]
+        # filename_rule和level有对应关系
+        # 如果level=[photo], filename_rule只能写Pxxx
+        # 如果level=[album], filename_rule只能写Axxx
 
         zip_dir: D:/jmcomic/zip/ # 压缩文件存放的文件夹
-        suffix: zip #压缩包后缀名，默认值为zip，可以指定为zip或者7z
-        filename_rule: Atitle # 压缩文件的命名规则
-        # 请注意⚠ [https://github.com/hect0x7/JMComic-Crawler-Python/issues/223#issuecomment-2045227527]
-        # filename_rule和所在钩子有对应关系
-        # 如果配置在 after_photo 下, filename_rule 可以写 Pxxx 和Axxx
-        # 如果配置在 after_album 下, filename_rule 只能写 Axxx，不能写 Pxxx
 
-        # zip插件也支持dir_rule配置项，可以替代旧版本的zip_dir和filename_rule
+        suffix: zip #压缩包后缀名，默认值为zip，可以指定为zip或者7z
+
+        # v2.6.0 以后，zip插件也支持dir_rule配置项，可以替代旧版本的zip_dir和filename_rule
         # 请注意⚠ 使用此配置项会使filename_rule，zip_dir，suffix三个配置项无效，与这三个配置项同时存在时仅会使用dir_rule
         # 示例如下:
         # dir_rule: # 新配置项，可取代旧的zip_dir和filename_rule
-        #   base_dir: D:/jmcomic-download/
-        #   rule: 'Bd / zip / JM{Aid}-{Atitle}.zip'  # 设置压缩文件夹规则，Bd指代base_dir，中间zip表示在{base_dir}下创建一个名为zip的文件夹，JM{Aid}-{Atitle}.zip 表示压缩文件的命名规则(需显式写出后缀名)
+        #   base_dir: D:/jmcomic-zip
+        #   rule: 'Bd / {Atitle} / [{Pid}]-{Ptitle}.zip'  # 设置压缩文件夹规则，中间Atitle表示创建一层文件夹，名称是本子标题。[{Pid}]-{Ptitle}.zip 表示压缩文件的命名规则(需显式写出后缀名)
+        # 使用此方法指定压缩包存储路径则无需和level对应
 
         delete_original_file: true # 压缩成功后，删除所有原文件和文件夹
         

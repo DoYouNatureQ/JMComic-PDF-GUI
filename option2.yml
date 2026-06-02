@@ -1,0 +1,7 @@
+download:
+  image:
+    suffix: .png
+dir_rule:
+  base_dir: ./爬取的本子/
+  # 多章节规则：在本子总文件夹下，每个章节按 "标题 1", "标题 2" 依次命名
+  rule: Bd / (JM{Aid}) {Atitle} / {Atitle} {Pindex}

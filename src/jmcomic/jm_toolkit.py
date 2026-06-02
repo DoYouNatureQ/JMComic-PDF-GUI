@@ -26,7 +26,7 @@ class JmcomicText:
     pattern_html_album_album_id = compile(r'<span class="number">.*?：JM(\d+)</span>')
     pattern_html_album_scramble_id = compile(r'var scramble_id = (\d+);')
     pattern_html_album_name = compile(r'id="book-name"[^>]*?>([\s\S]*?)<')
-    pattern_html_album_description = compile(r'[叙|敘]述：([\s\S]*?)</h2>')
+    pattern_html_album_description = compile(r'叙述：([\s\S]*?)</h2>')
     pattern_html_album_episode_list = compile(r'data-album="(\d+)"[^>]*>[\s\S]*?第(\d+)[话話]([\s\S]*?)<[\s\S]*?>')
     pattern_html_album_page_count = compile(r'<span class="pagecount">.*?:(\d+)</span>')
     pattern_html_album_pub_date = compile(r'>上架日期 : (.*?)</span>')
@@ -329,34 +329,8 @@ class JmcomicText:
 
     @classmethod
     def to_zh_cn(cls, s):
-        # 兼容旧接口，默认转换为简体
-        return cls.to_zh(s, 'zh-cn')
-
-    @classmethod
-    def to_zh(cls, s, target=None):
-        """
-        通用的繁简体转换接口。
-
-        :param s: 待转换字符串
-        :param target: 目标编码: 'zh-cn'（简体）, 'zh-tw'（繁体），或 None 表示不转换
-        :return: 转换后的字符串（若转换失败或未安装 zhconv，返回原始字符串）
-        """
-        if s is None:
-            return s
-
-        if not target:
-            return s
-
-        try:
-            import zhconv
-            return zhconv.convert(s, target)
-        except ImportError:
-            jm_log('zhconv.error', '繁简转换失败，未安装zhconv，请先使用命令安装: [pip install zhconv]')
-            return s
-        except Exception as e:
-            # 如果 zhconv 不可用或转换失败，则回退原字符串
-            jm_log('zhconv.error', f'error: [{e}], s: [{s}]')
-            return s
+        import zhconv
+        return zhconv.convert(s, 'zh-cn')
 
     @classmethod
     def try_mkdir(cls, save_dir: str):
@@ -413,23 +387,6 @@ class JmcomicText:
 
         path = f'/media/albums/{cls.parse_to_jm_id(album_id)}{size}.jpg'
         return cls.format_url(path, image_domain)
-
-    @classmethod
-    def compare_versions(cls, v1: str, v2: str) -> int:
-        parts1 = list(map(int, v1.split(".")))
-        parts2 = list(map(int, v2.split(".")))
-
-        # 补齐长度
-        length = max(len(parts1), len(parts2))
-        parts1 += [0] * (length - len(parts1))
-        parts2 += [0] * (length - len(parts2))
-
-        if parts1 > parts2:
-            return 1  # v1 大
-        elif parts1 < parts2:
-            return -1  # v2 大
-        else:
-            return 0  # 相等
 
 
 # 支持dsl: #{???} -> os.getenv(???)

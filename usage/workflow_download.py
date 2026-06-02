@@ -10,8 +10,8 @@ jm_albums = '''
 
 # 单独下载章节
 jm_photos = '''
-
-
+JM1217815
+JM264331
 
 '''
 
@@ -80,27 +80,6 @@ def cover_option_config(option: JmOption):
     suffix = env('IMAGE_SUFFIX', None)
     if suffix is not None:
         option.download.image.suffix = fix_suffix(suffix)
-
-    pdf_option = env('PDF_OPTION', None)
-    if pdf_option and pdf_option != '否':
-        call_when = 'after_album' if pdf_option == '是 | 本子维度合并pdf' else 'after_photo'
-        
-        pdf_name_rule = env('PDF_NAME_RULE', None)
-        if isinstance(pdf_name_rule, str):
-            pdf_name_rule = pdf_name_rule.strip()
-            
-        if not pdf_name_rule:
-            pdf_name_rule = '[JM{Aid}] {Atitle}' if call_when == 'after_album' else '[JM{Aid}] 第{Pindex}章-JM{Pid}-{Ptitle}'
-            
-        plugin = [{
-            'plugin': Img2pdfPlugin.plugin_key,
-            'kwargs': {
-                'pdf_dir': option.dir_rule.base_dir + '/pdf/',
-                'filename_rule': pdf_name_rule,
-                'delete_original_file': True,
-            }
-        }]
-        option.plugins[call_when] = plugin
 
 
 def log_before_raise():

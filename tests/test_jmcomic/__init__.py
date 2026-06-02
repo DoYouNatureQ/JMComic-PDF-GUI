@@ -1,3 +1,4 @@
+import io
 import platform
 import unittest
 
@@ -5,12 +6,9 @@ import unittest
 import jmcomic
 from jmcomic import *
 
-# 设置编码为 utf-8，使用 reconfigure() 而非替换 sys.stdout 对象
-# 直接替换会破坏 pytest 的 I/O 捕获机制，导致 "I/O operation on closed file" 错误
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8')
+# set encoding
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, 'utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, 'utf-8')
 # 获取项目根目录
 project_dir = os.path.abspath(os.path.dirname(__file__) + '/../..')
 os.chdir(project_dir)

@@ -1,0 +1,7 @@
+download:
+  image:
+    suffix: .png
+dir_rule:
+  base_dir: ./爬取的本子/
+  # 单章节规则：直接使用本子ID和标题做文件夹名
+  rule: Bd / (JM{Aid}) {Atitle}

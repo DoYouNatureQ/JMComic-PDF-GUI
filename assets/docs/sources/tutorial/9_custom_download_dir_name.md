@@ -53,32 +53,9 @@ D:/a/b/c/ddd/00003.webp
 
 除了title，你还可以写什么？其实Ptitle表示的是jmcomic里的章节实体类 JmPhotoDetail 的属性。
 
-最终能写什么，取决于 JmPhotoDetail 有哪些属性。建议您查阅源码或者使用 `get_properties_dict()` 方法在控制台打印并探索该实体类的所有可用字段。
+最终能写什么，取决于JmPhotoDetail有哪些属性，建议使用IDE来获知这些属性，不过这需要你懂一些python基础。
 
 除了Pxxx，你还可以写Axxx，表示这个章节所在的本子的属性xxx，详见本子实体类 JmAlbumDetail。
-
-> [!TIP]
-> **探索更多复杂的路径组合语法（如连字、加括号组合等）**
-> 除了单纯的属性拼接，`dir_rule.rule` 还支持带括号组合与连接符的高阶语法，比如使用 `(JM{Aid}-{Pindex})-{Pname}` 这种 f-string 和普通符号交织的写法。
-
-## 1.1 简繁体统一（normalize_zh）
-
-在一些源站中，同一作品或章节名称可能存在简体/繁体差异，导致在不同环境下生成重复或不一致的文件夹名。v2.6.10 引入了 `dir_rule.normalize_zh` 配置，用于可选地对目录名进行繁/简体规范化。
-
-示例用法：
-
-```yaml
-dir_rule:
-  base_dir: D:/a/b/c/
-  rule: Bd / Ptitle
-  normalize_zh: zh-cn # 可选值：None（默认，不转换）/ zh-cn / zh-tw
-```
-
-说明：
-
-- 当 `normalize_zh` 为 `zh-cn` 时，会把目录名中的中文规范为简体；为 `zh-tw` 时规范为繁体；为 `None` 或不配置时维持历史行为（不转换）。
-
-- 该功能依赖可选库 `zhconv`（非必需），若未安装或转换失败，系统会回退为原始字符串并继续下载，不会导致失败。
 
 
 ## 2. 自定义字段名

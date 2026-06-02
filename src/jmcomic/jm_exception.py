@@ -6,7 +6,6 @@ class JmcomicException(Exception):
     description = 'jmcomic 模块异常'
 
     def __init__(self, msg: str, context: dict):
-        super().__init__(msg)
         self.msg = msg
         self.context = context
 
@@ -183,7 +182,7 @@ class ExceptionTool:
 
     @classmethod
     def notify_all_listeners(cls, e):
-        registry: Dict[Type, Callable] = JmModuleConfig.REGISTRY_EXCEPTION_LISTENER
+        registry: Dict[Type, Callable[Type]] = JmModuleConfig.REGISTRY_EXCEPTION_LISTENER
         if not registry:
             return None
 

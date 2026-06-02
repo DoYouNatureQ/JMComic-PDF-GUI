@@ -36,7 +36,7 @@ class JmOptionPlugin:
         return cls(option)
 
     def log(self, msg, topic=None):
-        if not self.log_enable:
+        if self.log_enable is not True:
             return
 
         jm_log(
@@ -68,7 +68,7 @@ class JmOptionPlugin:
         删除文件和文件夹
         :param paths: 路径列表
         """
-        if not self.delete_original_file:
+        if self.delete_original_file is not True:
             return
 
         for p in paths:
@@ -120,11 +120,7 @@ class JmOptionPlugin:
         参数 dir_rule_dict 优先级最高，
         如果 dir_rule_dict 不为空，优先用 dir_rule_dict
         否则使用 base_dir + filename_rule + suffix
-
-        当album为空时，自动复制为photo.from_album，防止底层dir_rule的dsl包含Axx报错
         """
-        if album is None:
-            album = photo.from_album
         filepath: str
         base_dir: str
         if dir_rule_dict is not None:
@@ -136,7 +132,7 @@ class JmOptionPlugin:
             filepath = os.path.join(base_dir, DirRule.apply_rule_to_filename(album, photo, filename_rule) + fix_suffix(suffix))
 
         mkdir_if_not_exists(base_dir)
-        return fix_filepath(filepath)
+        return filepath
 
 
 class JmLoginPlugin(JmOptionPlugin):
@@ -158,6 +154,7 @@ class JmLoginPlugin(JmOptionPlugin):
 
         cookies = dict(client['cookies'])
         self.option.update_cookies(cookies)
+        JmModuleConfig.APP_COOKIES = cookies
 
         self.log('登录成功')
 
@@ -251,7 +248,7 @@ class UsageLogPlugin(JmOptionPlugin):
             ])
             self.log(msg, topic='log')
 
-            if enable_warning:
+            if enable_warning is True:
                 # 警告
                 warning()
 
@@ -320,7 +317,7 @@ class ZipPlugin(JmOptionPlugin):
                album: JmAlbumDetail = None,
                photo: JmPhotoDetail = None,
                delete_original_file=False,
-               level=None,
+               level='photo',
                filename_rule='Ptitle',
                suffix='zip',
                zip_dir='./',
@@ -331,9 +328,6 @@ class ZipPlugin(JmOptionPlugin):
         from .jm_downloader import JmDownloader
         downloader: JmDownloader
         self.downloader = downloader
-        # level 自动推导：有 album 则合并打包，只有 photo 则单章打包
-        if level is None:
-            level = 'album' if album is not None else 'photo'
         self.level = level
         self.delete_original_file = delete_original_file
 
@@ -380,9 +374,7 @@ class ZipPlugin(JmOptionPlugin):
                 relpath = os.path.relpath(abspath, photo_dir)
                 f.write(abspath, relpath)
 
-        # 打印结果
-        self.log(f'{photo.alias_cn()}压缩成功！'
-                 f'[{photo}] → [{zip_path}]', 'finish')
+        self.log(f'压缩章节[{photo.photo_id}]成功 → {zip_path}', 'finish')
         path_to_delete.append(self.unified_path(photo_dir))
 
     @staticmethod
@@ -405,9 +397,7 @@ class ZipPlugin(JmOptionPlugin):
                     abspath = os.path.join(photo_dir, file)
                     relpath = os.path.relpath(abspath, album_dir)
                     f.write(abspath, relpath)
-        # 打印结果
-        self.log(f'{album.alias_cn()}压缩成功！'
-                 f'[{album}] → [{zip_path}]', 'finish')
+        self.log(f'压缩本子[{album.album_id}]成功 → {zip_path}', 'finish')
 
     def after_zip(self, path_to_delete: List[str]):
         # 删除所有原文件
@@ -475,10 +465,10 @@ class ZipPlugin(JmOptionPlugin):
         if encrypt_type == 'random':
             is_random = True
             password = self.generate_random_str(48)
-            self.log(f'生成随机密码: [{password}] → [{zip_path}]', 'encrypt')
+            self.log(f'生成随机密码: [{"*" * 8}] → [{zip_path}]', 'encrypt')
         else:
             password = str(encrypt_dict['password'])
-            self.log(f'使用指定密码: [{password}] → [{zip_path}]', 'encrypt')
+            self.log(f'使用指定密码: [{"*" * 8}] → [{zip_path}]', 'encrypt')
 
         return password, is_random
 
@@ -558,28 +548,19 @@ class SendQQEmailPlugin(JmOptionPlugin):
 class LogTopicFilterPlugin(JmOptionPlugin):
     plugin_key = 'log_topic_filter'
 
-    import logging
-
-    class TopicFilter(logging.Filter):
-        def __init__(self, whitelist):
-            super().__init__()
-            self.whitelist = whitelist
-
-        def filter(self, record):
-            topic = getattr(record, 'topic', None)
-            if self.whitelist is not None and topic is not None and topic not in self.whitelist:
-                return False
-            return True
-
     def invoke(self, whitelist) -> None:
         if whitelist is not None:
             whitelist = set(whitelist)
 
-        from jmcomic import jm_logger
+        old_jm_log = JmModuleConfig.EXECUTOR_LOG
 
-        # 删除旧的同类 filter 避免重复
-        jm_logger.filters = [f for f in jm_logger.filters if not isinstance(f, LogTopicFilterPlugin.TopicFilter)]
-        jm_logger.addFilter(LogTopicFilterPlugin.TopicFilter(whitelist))
+        def new_jm_log(topic, msg):
+            if whitelist is not None and topic not in whitelist:
+                return
+
+            old_jm_log(topic, msg)
+
+        JmModuleConfig.EXECUTOR_LOG = new_jm_log
 
 
 class AutoSetBrowserCookiesPlugin(JmOptionPlugin):
@@ -786,17 +767,8 @@ class Img2pdfPlugin(JmOptionPlugin):
         pdf_filepath = self.decide_filepath(album, photo, filename_rule, 'pdf', pdf_dir, dir_rule)
 
         # 调用 img2pdf 把 photo_dir 下的所有图片转为pdf
-        result = self.write_img_2_pdf(pdf_filepath, album, photo, encrypt)
-        if not result:
-            return
-        img_path_ls, img_dir_ls = result
-
-        # noinspection PyTypeChecker
-        detail: DetailEntity = album or photo
-
-        # 打印结果
-        self.log(f'{detail.alias_cn()}合并PDF成功！'
-                 f'[{detail}] → [{pdf_filepath}]', 'finish')
+        img_path_ls, img_dir_ls = self.write_img_2_pdf(pdf_filepath, album, photo, encrypt)
+        self.log(f'Convert Successfully: JM{album or photo} → {pdf_filepath}')
 
         # 执行删除
         img_path_ls += img_dir_ls
@@ -820,7 +792,6 @@ class Img2pdfPlugin(JmOptionPlugin):
 
         if len(img_path_ls) == 0:
             self.log(f'所有文件夹都不存在图片，无法生成pdf：{img_dir_ls}', 'error')
-            return
 
         with open(pdf_filepath, 'wb') as f:
             f.write(img2pdf.convert(img_path_ls))
@@ -871,19 +842,12 @@ class LongImgPlugin(JmOptionPlugin):
 
         # 调用 PIL 把 photo_dir 下的所有图片合并为长图
         img_path_ls = self.write_img_2_long_img(long_img_path, album, photo)
-        if not img_path_ls:
-            return
-        # noinspection PyTypeChecker
-        detail: DetailEntity = album or photo
-
-        # 打印结果
-        self.log(f'{detail.alias_cn()}合并长图成功！'
-                 f'[{detail}] → [{long_img_path}]', 'finish')
+        self.log(f'Convert Successfully: JM{album or photo} → {long_img_path}')
 
         # 执行删除
         self.execute_deletion(img_path_ls)
 
-    def write_img_2_long_img(self, long_img_path, album: JmAlbumDetail, photo: JmPhotoDetail) -> Optional[List[str]]:
+    def write_img_2_long_img(self, long_img_path, album: JmAlbumDetail, photo: JmPhotoDetail) -> List[str]:
         import itertools
         from PIL import Image
 
@@ -894,10 +858,6 @@ class LongImgPlugin(JmOptionPlugin):
 
         img_paths = itertools.chain(*map(files_of_dir, img_dir_items))
         img_paths = list(filter(lambda x: not x.startswith('.'), img_paths))  # 过滤系统文件
-
-        if not img_paths:
-            self.log(f'所有文件夹都不存在图片，无法生成long_img：{img_paths}', 'error')
-            return
 
         images = self.open_images(img_paths)
 
@@ -985,11 +945,11 @@ class JmServerPlugin(JmOptionPlugin):
             base_run_kwargs.update(run)
             run = base_run_kwargs
 
-        if self.running:
+        if self.running is True:
             return
 
         with self.run_server_lock:
-            if self.running:
+            if self.running is True:
                 return
 
             # 服务器的代码位于一个独立库：plugin_jm_server，需要独立安装
@@ -1105,7 +1065,7 @@ class SubscribeAlbumUpdatePlugin(JmOptionPlugin):
                 self.log('Exception happened: ' + str(e), 'check_update.error')
                 continue
 
-            if not has_update:
+            if has_update is False:
                 continue
 
             self.log(f'album={album_id}，发现新章节: {photo_new_list}，准备开始下载')
@@ -1326,7 +1286,9 @@ class AdvancedRetryPlugin(JmOptionPlugin):
                 try:
                     return do_request(domain)
                 except Exception as e:
-                    jm_log('req.error', e)
+                    from common import traceback_print_exec
+                    traceback_print_exec()
+                    jm_log('req.error', str(e))
                     self.update_failed_count(client, domain)
 
         return client.fallback(request, url, 0, 0, is_image, **kwargs)
