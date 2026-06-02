@@ -1,6 +1,6 @@
-# [JMComic-PDF-GUI](https://github.com/DoYouNatureQ/JMComic-PDF-GUI)  - 禁漫天堂漫画下载 & PDF 合成图形化工具
+# [JMComic-PDF-GUI](https://github.com/DoYouNatureQ/JMComic-PDF-GUI) - 禁漫天堂漫画下载 & PDF 合成图形化工具
 
-基于 [JMComic-Crawler-Python](https://github.com/hect0x7/JMComic-Crawler-Python) 二次开发，在原有下载功能基础上，增加了**图形化界面 (GUI)**、**PDF 自动合成**、**账号登录下载**等实用功能。
+基于 [JMComic-Crawler-Python](https://github.com/hect0x7/JMComic-Crawler-Python) 二次开发，在原有下载功能基础上，增加了**图形化界面 (GUI)**、**搜索ID下载**、**PDF 自动合成**、**账号登录下载**等实用功能。
 
 ## 主要功能
 
@@ -30,12 +30,7 @@ pip install img2pdf pillow
 
 ### 方式一：GUI 图形界面（推荐）
 
-直接双击运行 `GUI/启动.bat`，或者`dist/JM漫画下载器.exe`，或者命令行执行：
-
-```shell
-cd GUI
-python main.py
-```
+[下载JM漫画下载器.exe](https://github.com/DoYouNatureQ/JMComic-PDF-GUI/releases/tag/EXE)`,双击即可运行`
 
 GUI 界面支持以下操作流程：
 
