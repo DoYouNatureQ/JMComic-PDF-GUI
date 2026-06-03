@@ -1,7 +1,6 @@
 import os
 import io
 import re
-import glob
 
 import img2pdf
 from PIL import Image
@@ -168,12 +167,17 @@ class PdfMaker:
 
 
 def _collect_images(directory):
-    patterns = ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.gif"]
-    images = set()
-    for pat in patterns:
-        images.update(glob.glob(os.path.join(directory, pat)))
+    exts = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+    images = []
+    try:
+        for f in os.listdir(directory):
+            path = os.path.join(directory, f)
+            if os.path.isfile(path) and os.path.splitext(f)[1].lower() in exts:
+                images.append(path)
+    except OSError:
+        return []
 
-    images = sorted(images, key=lambda x: (
+    images.sort(key=lambda x: (
         int(re.search(r'(\d+)', os.path.basename(x)).group(1))
         if re.search(r'(\d+)', os.path.basename(x)) else 0
     ))
