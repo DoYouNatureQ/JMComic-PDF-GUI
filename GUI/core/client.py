@@ -34,7 +34,7 @@ class ComicClient:
             option = jmcomic.JmOption.default()
 
         option.dir_rule.base_dir = DOWNLOAD_DIR
-        option.dir_rule.rule_dsl = "Bd / (JM{Aid}) {Atitle} / {Ptitle}"
+        option.dir_rule.rule_dsl = "Bd / (JM{Aid}) {Atitle} / [{Pindex:03d}] {Ptitle}"
         option.dir_rule.parser_list = option.dir_rule.get_rule_parser_list(option.dir_rule.rule_dsl)
         return option
 

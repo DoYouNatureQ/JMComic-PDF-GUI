@@ -1,10 +1,13 @@
+import os
 import threading
 import logging
 
 import jmcomic
 from jmcomic import JmDownloader, JmAlbumDetail, JmPhotoDetail, JmImageDetail
+from common import fix_windir_name
 
 from core.client import ComicClient
+from config import DOWNLOAD_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -98,13 +101,20 @@ class Downloader:
     def download_chapter(self, manga_info, chapter_info, base_dir=None):
         album_id = manga_info.get("id", "")
         chapter_id = chapter_info.get("id", "")
+        manga_title = manga_info.get("title", "")
         if not album_id or not chapter_id:
             self._report_status("无效的漫画或章节ID")
             return
 
         option = self._comic_client.option.copy_option()
-        if base_dir:
-            option.dir_rule.base_dir = base_dir
+        download_root = base_dir or DOWNLOAD_DIR
+        manga_folder = os.path.join(
+            download_root,
+            fix_windir_name(f"(JM{album_id}) {manga_title}")
+        )
+        option.dir_rule.base_dir = manga_folder
+        option.dir_rule.rule_dsl = "Bd / [{Pindex:03d}] {Ptitle}"
+        option.dir_rule.parser_list = option.dir_rule.get_rule_parser_list(option.dir_rule.rule_dsl)
 
         try:
             jmcomic.download_photo(int(chapter_id), option)
