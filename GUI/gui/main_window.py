@@ -285,11 +285,11 @@ class JMComicApp(ctk.CTk):
         if getattr(self, "_resize_pending", False):
             return
         self._resize_pending = True
-        self.after(80, self._do_window_configure, event)
+        self.after(80, self._do_window_configure)
 
-    def _do_window_configure(self, event=None):
+    def _do_window_configure(self):
         self._resize_pending = False
-        w = event.width if (event and event.width > 1) else self.winfo_width()
+        w = self.winfo_width()
         if w < 200:
             return
         left_w = max(220, int(w * 0.23))
@@ -300,7 +300,7 @@ class JMComicApp(ctk.CTk):
             self.info_card.configure(width=info_w)
 
     def _apply_responsive_layout(self):
-        self._do_window_configure(event=None)
+        self._do_window_configure()
 
     def _init_variables(self):
         self.username_var = ctk.StringVar()
