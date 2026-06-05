@@ -44,28 +44,33 @@ class PdfMaker:
 
         return output_path
 
-    def make_single_chapter_pdf(self, manga_title, chapter_title, download_dir=None):
+    def make_single_chapter_pdf(self, manga_title, chapter_title, download_dir=None, chapter_dir=None):
         if download_dir is None:
             download_dir = DOWNLOAD_DIR
 
-        manga_dir = self._find_manga_dir(manga_title, download_dir)
-        if not manga_dir:
-            raise ValueError(f"漫画目录不存在: {manga_title}")
+        if chapter_dir:
+            if not os.path.isdir(chapter_dir):
+                raise ValueError(f"章节目录不存在: {chapter_dir}")
+        else:
+            manga_dir = self._find_manga_dir(manga_title, download_dir)
+            if not manga_dir:
+                raise ValueError(f"漫画目录不存在: {manga_title}")
 
-        chapter_dir = None
-        for d in sorted(os.listdir(manga_dir)):
-            full = os.path.join(manga_dir, d)
-            if os.path.isdir(full) and chapter_title in d:
-                chapter_dir = full
-                break
+            for d in sorted(os.listdir(manga_dir)):
+                full = os.path.join(manga_dir, d)
+                if os.path.isdir(full) and chapter_title in d:
+                    chapter_dir = full
+                    break
 
-        if not chapter_dir:
-            all_dirs = [d for d in os.listdir(manga_dir) if os.path.isdir(os.path.join(manga_dir, d))]
-            if all_dirs:
-                chapter_dir = os.path.join(manga_dir, sorted(all_dirs)[-1])
+            if not chapter_dir:
+                all_dirs = [d for d in os.listdir(manga_dir) if os.path.isdir(os.path.join(manga_dir, d))]
+                if all_dirs:
+                    chapter_dir = os.path.join(manga_dir, sorted(all_dirs)[-1])
 
-        if not chapter_dir:
-            raise ValueError(f"未找到章节文件夹: {chapter_title}")
+            if not chapter_dir:
+                raise ValueError(f"未找到章节文件夹: {chapter_title}")
+
+        manga_dir = os.path.dirname(chapter_dir)
 
         images = _collect_images(chapter_dir)
         if not images:

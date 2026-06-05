@@ -117,8 +117,10 @@ class Downloader:
         option.dir_rule.parser_list = option.dir_rule.get_rule_parser_list(option.dir_rule.rule_dsl)
 
         try:
-            jmcomic.download_photo(int(chapter_id), option)
+            photo, _dler = jmcomic.download_photo(int(chapter_id), option)
             self._report_status(f"章节下载完成: {chapter_info.get('title', chapter_id)}")
+            chapter_dir = option.dir_rule.decide_image_save_dir(photo)
+            return chapter_dir
         except Exception as e:
             self._report_status(f"章节下载出错: {e}")
             logger.error("章节下载出错 [%s/%s]: %s", album_id, chapter_id, e)

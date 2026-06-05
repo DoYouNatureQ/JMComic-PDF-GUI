@@ -113,6 +113,12 @@ class CanvasMangaList(ctk.CTkFrame):
 
     def _do_configure(self):
         self._redraw_pending = None
+        w = self.canvas.winfo_width() or 300
+        h = self.canvas.winfo_height() or 1
+        if w == getattr(self, "_last_canvas_w", 0) and h == getattr(self, "_last_canvas_h", 0):
+            return
+        self._last_canvas_w = w
+        self._last_canvas_h = h
         self._update_scroll()
         self._redraw()
 
@@ -292,6 +298,9 @@ class JMComicApp(ctk.CTk):
         w = self.winfo_width()
         if w < 200:
             return
+        if w == getattr(self, "_last_win_width", 0):
+            return
+        self._last_win_width = w
         left_w = max(220, int(w * 0.23))
         info_w = max(220, int((w - 40 - left_w) * 0.32))
         if hasattr(self, "left_panel_card"):
@@ -1266,14 +1275,15 @@ class JMComicApp(ctk.CTk):
             self._log(f"  [{idx}/{total}] {ch_title}")
 
             try:
-                self.downloader.download_chapter(manga_info, chapter, base_dir=self.download_dir)
+                chapter_dir = self.downloader.download_chapter(manga_info, chapter, base_dir=self.download_dir)
                 self._log(f"  [{idx}/{total}] {ch_title} ✓ 下载完成")
 
                 if auto_pdf:
                     self._log(f"  [{idx}/{total}] 正在生成PDF: {ch_title}")
                     try:
                         pdf_path = self.pdf_maker.make_single_chapter_pdf(
-                            title, ch_title, download_dir=self.download_dir)
+                            title, ch_title, download_dir=self.download_dir,
+                            chapter_dir=chapter_dir)
                         short_path = os.path.basename(pdf_path) if pdf_path else "?"
                         self._log(f"  [{idx}/{total}] PDF已生成: {short_path}")
                     except Exception as e:
