@@ -49,6 +49,7 @@ class PdfMaker:
             download_dir = DOWNLOAD_DIR
 
         if chapter_dir:
+            chapter_dir = os.path.normpath(chapter_dir)
             if not os.path.isdir(chapter_dir):
                 raise ValueError(f"章节目录不存在: {chapter_dir}")
         else:

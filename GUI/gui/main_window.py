@@ -887,7 +887,16 @@ class JMComicApp(ctk.CTk):
         except OSError:
             pass
 
+    def _ensure_favorites_cache(self):
+        if not os.path.exists(FAVORITES_CACHE):
+            try:
+                with open(FAVORITES_CACHE, "w", encoding="utf-8") as f:
+                    json.dump([], f)
+            except OSError:
+                pass
+
     def _load_favorites_cache(self):
+        self._ensure_favorites_cache()
         try:
             with open(FAVORITES_CACHE, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -914,27 +923,21 @@ class JMComicApp(ctk.CTk):
             self._log("收藏地址: https://18comic.vip/user/favorite")
 
         self._clear_manga_list()
-        cached = self._load_favorites_cache()
-        if cached:
-            self.manga_list.set_items(cached)
-            self.favorites_data = cached
-            self._log(f"(缓存) 加载 {len(cached)} 部收藏漫画")
+        self._log("正在从服务器获取最新收藏数据...")
 
         def worker():
             try:
                 if not self.auth.verify_session_valid():
                     self.after(0, lambda: self._log("会话已过期，请重新登录后再刷新收藏列表"))
-                    self.after(0, lambda: self._on_favorites_loaded([], cached))
+                    self.after(0, lambda: self._on_favorites_loaded([]))
                     return
                 favs = self.parser.parse_all_favorites(username=self.auth.username or "")
                 if not favs:
                     self.after(0, lambda: threading.Thread(target=self._diagnose_favorites_failure, daemon=True).start())
-                self.after(0, lambda: self._on_favorites_loaded(favs, cached))
+                self.after(0, lambda: self._on_favorites_loaded(favs))
             except Exception as e:
                 self.after(0, lambda: self._log(f"加载失败: {e}"))
-                if not cached:
-                    self.after(0, lambda: messagebox.showerror("加载失败", f"无法获取收藏列表: {e}"))
-                self.after(0, lambda: self._on_favorites_loaded([], cached))
+                self.after(0, lambda: self._on_favorites_loaded([]))
         threading.Thread(target=worker, daemon=True).start()
 
     def _diagnose_favorites_failure(self):
@@ -988,23 +991,28 @@ class JMComicApp(ctk.CTk):
         except Exception as e:
             self.after(0, lambda: self._log(f"[诊断] 失败: {e}"))
 
-    def _on_favorites_loaded(self, favs, cached):
+    def _on_favorites_loaded(self, favs):
         self._refreshing = False
         self.btn_refresh.configure(state="normal", text="刷 新 收 藏")
         self.btn_search.configure(state="normal")
         if not favs:
-            if self.favorites_data:
-                self._log("刷新失败（会话可能已过期），仍显示缓存数据")
+            cached = self._load_favorites_cache()
+            if cached:
+                self.manga_list.set_items(cached)
+                self.favorites_data = cached
+                self._log("刷新失败，已恢复为本地缓存数据")
                 self._log("提示: 请尝试重新登录。如问题持续，检查 %TEMP%/jmpdf_debug_fav_*.html")
+                messagebox.showwarning("刷新失败", "无法从服务器获取最新收藏数据，已恢复为本地缓存。\n请尝试重新登录后再试。")
             else:
                 self._log("收藏列表为空（请确认已登录且已收藏漫画）")
                 self._log("提示: 诊断信息已写入上方日志。调试文件: %TEMP%/jmpdf_debug_fav_*.html")
+                messagebox.showerror("刷新失败", "无法获取收藏列表。\n请确认已登录且已收藏漫画。")
             return
         self._save_favorites_cache(favs)
         self._clear_manga_list()
         self.favorites_data = favs
         self.manga_list.set_items(favs)
-        self._log(f"加载 {len(favs)} 部收藏漫画")
+        self._log(f"已从服务器同步 {len(favs)} 部收藏漫画")
 
     def _do_search(self):
         keyword = self.search_var.get().strip()

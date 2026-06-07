@@ -119,7 +119,7 @@ class Downloader:
         try:
             photo, _dler = jmcomic.download_photo(int(chapter_id), option)
             self._report_status(f"章节下载完成: {chapter_info.get('title', chapter_id)}")
-            chapter_dir = option.dir_rule.decide_image_save_dir(photo)
+            chapter_dir = os.path.normpath(option.decide_image_save_dir(photo))
             return chapter_dir
         except Exception as e:
             self._report_status(f"章节下载出错: {e}")
