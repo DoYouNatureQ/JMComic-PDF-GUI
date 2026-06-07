@@ -12,7 +12,7 @@
 - **命令行模式**：也支持通过命令行快速下载（继承自原项目）
 - **独立的EXE文件**：双击EXE文件即可使用
 
-## 安装教程,直接[下载JM漫画下载器.exe]可跳过此步骤(https://github.com/DoYouNatureQ/JMComic-PDF-GUI/releases)
+## 安装教程,**直接[下载JM漫画下载器.exe](https://github.com/DoYouNatureQ/JMComic-PDF-GUI/releases)可跳过此步骤**
 
 > ⚠ 需要先安装 Python，版本 >= 3.9
 
