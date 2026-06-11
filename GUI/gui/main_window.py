@@ -53,6 +53,7 @@ class CanvasMangaList(ctk.CTkFrame):
     """高性能虚拟化漫画列表 - 使用Canvas直接绘制文本，零Widget开销"""
     ITEM_HEIGHT = 52
     _REDRAW_DELAY = 16
+    _RESIZE_DELAY = 200
 
     def __init__(self, master, on_select=None, **kw):
         super().__init__(master, fg_color=BG_GRAY, corner_radius=8, **kw)
@@ -60,6 +61,7 @@ class CanvasMangaList(ctk.CTkFrame):
         self.items = []
         self.selected_index = -1
         self._redraw_pending = None
+        self._resize_pending = None
         self._visible_indices = set()
 
         self.canvas = tk.Canvas(
@@ -107,15 +109,17 @@ class CanvasMangaList(ctk.CTkFrame):
                 return
 
     def _on_configure(self, event):
-        if self._redraw_pending:
-            self.after_cancel(self._redraw_pending)
-        self._redraw_pending = self.after(self._REDRAW_DELAY, self._do_configure)
+        if self._resize_pending:
+            self.after_cancel(self._resize_pending)
+        self._resize_pending = self.after(self._RESIZE_DELAY, self._do_configure)
 
     def _do_configure(self):
-        self._redraw_pending = None
+        self._resize_pending = None
         w = self.canvas.winfo_width() or 300
         h = self.canvas.winfo_height() or 1
         if w == getattr(self, "_last_canvas_w", 0) and h == getattr(self, "_last_canvas_h", 0):
+            return
+        if not self.winfo_viewable():
             return
         self._last_canvas_w = w
         self._last_canvas_h = h
