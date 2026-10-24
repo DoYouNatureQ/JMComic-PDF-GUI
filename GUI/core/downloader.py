@@ -1,6 +1,7 @@
 import os
 import threading
 import logging
+from functools import partial
 
 import jmcomic
 from jmcomic import JmDownloader, JmAlbumDetail, JmPhotoDetail, JmImageDetail
@@ -14,16 +15,20 @@ logger = logging.getLogger(__name__)
 
 class _ProgressDownloader(JmDownloader):
 
-    def __init__(self, option, on_progress=None, on_status=None, cancel_flag=None):
+    def __init__(self, option, on_progress=None, on_status=None, cancel_flag=None,
+                 manga_title="", total_photos=1):
         super().__init__(option)
         self._on_progress = on_progress
         self._on_status = on_status
         self._cancel_flag = cancel_flag
         self._current_photo_index = 0
-        self._total_photos = 0
+        self._total_photos = total_photos
         self._current_image_index = 0
         self._total_images = 0
-        self._manga_title = ""
+        self._manga_title = manga_title
+        # 多线程下载图片，计数需加锁并去重
+        self._count_lock = threading.Lock()
+        self._finished_images = set()
 
     def before_album(self, album: JmAlbumDetail):
         super().before_album(album)
@@ -41,6 +46,7 @@ class _ProgressDownloader(JmDownloader):
         self._current_photo_index += 1
         self._total_images = len(photo)
         self._current_image_index = 0
+        self._finished_images.clear()
         if self._on_status:
             self._on_status(
                 f"下载章节 [{self._current_photo_index}/{self._total_photos}]: {photo.name}"
@@ -48,21 +54,32 @@ class _ProgressDownloader(JmDownloader):
 
     def after_image(self, image: JmImageDetail, img_save_path):
         super().after_image(image, img_save_path)
-        self._current_image_index += 1
-        if self._on_progress:
-            self._on_progress(
-                self._current_photo_index,
-                self._total_photos,
-                self._current_image_index,
-                self._total_images,
-                self._manga_title,
-            )
+        self._count_image_done(image)
 
     def before_image(self, image: JmImageDetail, img_save_path):
         if self._cancel_flag and self._cancel_flag.is_set():
             image.skip = True
             return
         super().before_image(image, img_save_path)
+        # 已存在的文件走缓存跳过，不会触发 after_image，这里提前计数
+        if image.exists and self.option.decide_download_cache(image):
+            self._count_image_done(image)
+
+    def _count_image_done(self, image):
+        with self._count_lock:
+            if image.tag in self._finished_images:
+                return
+            self._finished_images.add(image.tag)
+            done = len(self._finished_images)
+            total = self._total_images
+        if self._on_progress and total:
+            self._on_progress(
+                self._current_photo_index,
+                self._total_photos,
+                done,
+                total,
+                self._manga_title,
+            )
 
 
 class Downloader:
@@ -116,8 +133,17 @@ class Downloader:
         option.dir_rule.rule_dsl = "Bd / [{Pindex:03d}] {Ptitle}"
         option.dir_rule.parser_list = option.dir_rule.get_rule_parser_list(option.dir_rule.rule_dsl)
 
+        downloader_cls = partial(
+            _ProgressDownloader,
+            on_progress=self._report_progress,
+            on_status=self._report_status,
+            cancel_flag=self._cancel_flag,
+            manga_title=manga_title,
+        )
+
         try:
-            photo, _dler = jmcomic.download_photo(int(chapter_id), option)
+            photo, _dler = jmcomic.download_photo(
+                int(chapter_id), option, downloader=downloader_cls)
             self._report_status(f"章节下载完成: {chapter_info.get('title', chapter_id)}")
             chapter_dir = os.path.normpath(option.decide_image_save_dir(photo))
             return chapter_dir

@@ -83,65 +83,83 @@ class PdfMaker:
         self.make_pdf(images, pdf_path, title=os.path.basename(chapter_dir))
         return pdf_path
 
-    def make_chapter_pdfs(self, manga_title, download_dir=None):
+    def make_chapter_pdfs(self, manga_title, download_dir=None,
+                          manga_id=None, chapter_titles=None):
+        """把已下载的章节图片转换为PDF。
+
+        chapter_titles 为 None 时转换磁盘上全部章节；
+        指定 chapter_titles 时只转换能找到的章节，找不到的标题放入返回的
+        missing 列表（不报错，由调用方决定是否提示下载）。
+
+        返回 (pdf_outputs, missing_titles)。
+        """
         if download_dir is None:
             download_dir = DOWNLOAD_DIR
 
-        manga_dir = self._find_manga_dir(manga_title, download_dir)
+        manga_dir = self._find_manga_dir(manga_title, download_dir,
+                                         manga_id=manga_id)
         if not manga_dir:
             raise ValueError(f"漫画目录不存在: {manga_title}")
 
-        chapter_dirs = sorted([
-            d for d in os.listdir(manga_dir)
-            if os.path.isdir(os.path.join(manga_dir, d))
-        ])
+        chapter_dirs, missing = self._find_chapter_dirs(manga_dir,
+                                                        chapter_titles)
 
-        if not chapter_dirs:
+        if chapter_titles is None and not chapter_dirs:
             images = _collect_images(manga_dir)
             if images:
                 safe_title = _sanitize(manga_title)
                 pdf_path = os.path.join(manga_dir, f"{safe_title}.pdf")
                 self.make_pdf(images, pdf_path, title=manga_title)
-                return [pdf_path]
+                return [pdf_path], []
             raise ValueError("没有找到章节文件夹或图片文件")
 
         pdf_outputs = []
         for chapter_dir in chapter_dirs:
-            full_dir = os.path.join(manga_dir, chapter_dir)
-            images = _collect_images(full_dir)
+            images = _collect_images(chapter_dir)
             if not images:
                 continue
 
-            safe_chapter = _sanitize(chapter_dir)
+            safe_chapter = _sanitize(os.path.basename(chapter_dir))
             pdf_name = f"{safe_chapter}.pdf"
             pdf_path = os.path.join(manga_dir, pdf_name)
 
             try:
-                self.make_pdf(images, pdf_path, title=chapter_dir)
+                self.make_pdf(images, pdf_path,
+                              title=os.path.basename(chapter_dir))
                 pdf_outputs.append(pdf_path)
             except Exception as e:
                 print(f"生成PDF失败 [{chapter_dir}]: {e}")
 
-        return pdf_outputs
+        return pdf_outputs, missing
 
-    def make_full_pdf(self, manga_title, download_dir=None):
+    def make_full_pdf(self, manga_title, download_dir=None,
+                      manga_id=None, chapter_titles=None):
+        """把已下载的章节图片合并为一个完整版PDF。
+
+        指定 chapter_titles 时只合并这些章节的图片（按给出顺序），
+        找不到的标题放入返回的 missing 列表。
+
+        返回 (pdf_path, missing_titles)。
+        """
         if download_dir is None:
             download_dir = DOWNLOAD_DIR
 
-        manga_dir = self._find_manga_dir(manga_title, download_dir)
+        manga_dir = self._find_manga_dir(manga_title, download_dir,
+                                         manga_id=manga_id)
         if not manga_dir:
             raise ValueError(f"漫画目录不存在: {manga_title}")
 
-        chapter_dirs = sorted([
-            d for d in os.listdir(manga_dir)
-            if os.path.isdir(os.path.join(manga_dir, d))
-        ])
+        chapter_dirs, missing = self._find_chapter_dirs(manga_dir,
+                                                        chapter_titles)
+
+        if chapter_titles and not chapter_dirs:
+            # 勾选的章节一个都没下载过，直接返回缺失列表，由界面提示
+            return None, missing
 
         all_images = []
         if chapter_dirs:
             for chapter_dir in chapter_dirs:
-                full_dir = os.path.join(manga_dir, chapter_dir)
-                all_images.extend(_collect_images(full_dir))
+                all_images.extend(_collect_images(chapter_dir))
         else:
             all_images = _collect_images(manga_dir)
 
@@ -149,27 +167,94 @@ class PdfMaker:
             raise ValueError("没有找到图片文件")
 
         safe_title = _sanitize(manga_title)
-        pdf_path = os.path.join(manga_dir, f"{safe_title}_完整版.pdf")
+        if chapter_titles:
+            # 勾选章节的合并版单独命名，避免覆盖全量完整版PDF
+            pdf_path = os.path.join(
+                manga_dir, f"{safe_title}_合并{len(chapter_dirs)}章.pdf")
+        else:
+            pdf_path = os.path.join(manga_dir, f"{safe_title}_完整版.pdf")
         self.make_pdf(all_images, pdf_path, title=manga_title)
-        return pdf_path
+        return pdf_path, missing
+
+    def check_downloaded_chapters(self, manga_title, chapter_titles,
+                                  download_dir=None, manga_id=None):
+        """检查章节是否已下载（本地存在对应章节文件夹）。
+
+        返回 (已下载章节标题列表, 未下载章节标题列表)。
+        """
+        if download_dir is None:
+            download_dir = DOWNLOAD_DIR
+
+        manga_dir = self._find_manga_dir(manga_title, download_dir,
+                                         manga_id=manga_id)
+        if not manga_dir:
+            return [], list(chapter_titles)
+
+        _dirs, missing = self._find_chapter_dirs(manga_dir,
+                                                 list(chapter_titles))
+        missing_set = set(missing)
+        found = [t for t in chapter_titles if t not in missing_set]
+        return found, missing
 
     @staticmethod
-    def _find_manga_dir(manga_title, download_dir):
+    def _find_manga_dir(manga_title, download_dir, manga_id=None):
         if not os.path.isdir(download_dir):
             return None
 
-        for item in os.listdir(download_dir):
-            item_path = os.path.join(download_dir, item)
-            if os.path.isdir(item_path) and manga_title in item:
-                return item_path
+        items = os.listdir(download_dir)
 
+        # 漫画ID不随标题变动，优先按下载时生成的 "(JM{id})" 前缀匹配
+        if manga_id:
+            prefix = f"(JM{manga_id})"
+            for item in items:
+                item_path = os.path.join(download_dir, item)
+                if os.path.isdir(item_path) and item.startswith(prefix):
+                    return item_path
+
+        candidates = [manga_title]
         safe = _sanitize(manga_title)
-        for item in os.listdir(download_dir):
-            item_path = os.path.join(download_dir, item)
-            if os.path.isdir(item_path) and safe in item:
-                return item_path
+        if safe != manga_title:
+            candidates.append(safe)
+        for cand in candidates:
+            for item in items:
+                item_path = os.path.join(download_dir, item)
+                if os.path.isdir(item_path) and cand in item:
+                    return item_path
 
         return None
+
+    @staticmethod
+    def _find_chapter_dirs(manga_dir, chapter_titles=None):
+        """解析章节目录。
+
+        chapter_titles 为 None 时返回磁盘上全部章节目录（按名称排序）；
+        否则按标题逐个匹配章节文件夹（文件夹名为 "[NNN] 标题"），
+        返回 (匹配到的目录列表(按标题顺序), 未匹配到的标题列表)。
+        """
+        all_dirs = sorted([
+            d for d in os.listdir(manga_dir)
+            if os.path.isdir(os.path.join(manga_dir, d))
+        ])
+
+        if chapter_titles is None:
+            return [os.path.join(manga_dir, d) for d in all_dirs], []
+
+        found_dirs, missing = [], []
+        for title in chapter_titles:
+            variants = [title]
+            safe = _sanitize(title)
+            if safe != title:
+                variants.append(safe)
+            match = None
+            for d in all_dirs:
+                if any(v and v in d for v in variants):
+                    match = os.path.join(manga_dir, d)
+                    break
+            if match:
+                found_dirs.append(match)
+            else:
+                missing.append(title)
+        return found_dirs, missing
 
 
 def _collect_images(directory):

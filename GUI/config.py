@@ -13,7 +13,7 @@ else:
 
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 COOKIE_DIR = os.path.join(BASE_DIR, "cookies")
-COOKIE_FILE = os.path.join(COOKIE_DIR, "session.pkl")
+COOKIE_FILE = os.path.join(COOKIE_DIR, "session.json")
 FAVORITES_CACHE = os.path.join(BASE_DIR, "favorites_cache.json")
 SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
 
