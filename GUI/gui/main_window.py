@@ -379,7 +379,7 @@ class JMComicApp(QMainWindow):
         self.lbl_title = QLabel("JMComic-PDF", objectName="navTitle")
         layout.addWidget(self.lbl_title)
 
-        self.lbl_version = QLabel("v2.0", objectName="navVersion")
+        self.lbl_version = QLabel("V3.0", objectName="navVersion")
         layout.addWidget(self.lbl_version)
 
         search_wrap = QWidget()
